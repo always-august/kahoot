@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+
+# 런타임 생성물 (업로드 이미지)
+public/uploads/

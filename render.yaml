@@ -1,0 +1,18 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# 대시보드에서 New + → Blueprint 로 이 레포를 선택하면 아래 설정대로 서비스가 생성됩니다.
+services:
+  - type: web
+    name: play-imweb
+    runtime: node
+    plan: free # 이벤트 당일엔 starter($7/mo) 권장 — free 는 15분 유휴 시 슬립 + 콜드스타트(30~60초)
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    # ⚠️ 인스턴스는 반드시 1개 — 방·점수가 메모리에 있어 2개 이상이면 참가자가 다른 서버에 붙어 깨짐.
+    #    (free/starter 는 기본 1개. 유료에서 수동 스케일 금지)
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # PUBLIC_URL 은 설정하지 않아도 됩니다 —
+      # Render 가 RENDER_EXTERNAL_URL 을 자동 주입하고, 앱이 이를 참가 링크/QR 에 사용합니다(src/lib/net.ts).
+      # 커스텀 도메인을 쓸 때만 PUBLIC_URL 을 그 주소로 지정하세요.

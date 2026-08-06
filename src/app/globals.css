@@ -1,0 +1,148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Pretendard (기술블로그와 동일 웹폰트) */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css");
+
+/* ── 컬러 토큰 (다크 전용) ───────────────────────────────────────────── */
+:root {
+  --color-bg: #000000;
+  --color-card: #14161c;
+  --color-surface: #1b1f27;
+  --color-text: #e7eaee;
+  --color-subtext: #a7b0bc;
+  --color-muted: #6b7480;
+  --color-border: #2a2f37;
+  --color-brand: #2bff66;
+  --color-brand-dark: #15e04f;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.55);
+  --shadow-card-hover: 0 1px 2px rgba(0, 0, 0, 0.6), 0 14px 40px rgba(0, 0, 0, 0.6);
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  color-scheme: dark;
+}
+
+/* ── 베이스 ──────────────────────────────────────────────────────────── */
+html {
+  background-color: #000000;
+}
+html,
+body {
+  padding: 0;
+  margin: 0;
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "ss02", "cv11";
+}
+
+/* 매트릭스 배경(fixed, -z-10)이 비치도록 body 는 투명 */
+body {
+  background-color: transparent;
+  font-family:
+    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  min-height: 100dvh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* 스크램블 타이틀의 임시 글자 */
+.dud {
+  color: #0f0;
+  opacity: 0.7;
+}
+
+/* ── 컴포넌트 ────────────────────────────────────────────────────────── */
+@layer components {
+  .card {
+    @apply rounded-card border border-line bg-[#14161ce6] shadow-card backdrop-blur-sm;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3
+      font-semibold transition active:scale-[0.98] disabled:opacity-40
+      disabled:pointer-events-none select-none;
+  }
+  .btn-primary {
+    @apply btn bg-brand text-black hover:bg-brand-dark;
+  }
+  .btn-ghost {
+    @apply btn border border-line bg-[#14161ccc] text-ink-900 hover:border-brand/50 hover:text-brand;
+  }
+  .btn-lg {
+    @apply px-7 py-4 text-lg rounded-2xl;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-line bg-black/40 px-4 py-3
+      text-ink-900 placeholder-ink-500 outline-none
+      focus:border-brand focus:ring-2 focus:ring-brand/20;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-ink-700;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-chip border border-transparent
+      bg-surface px-3 py-1.5 text-sm font-medium text-ink-700;
+  }
+}
+
+/* ── 인터랙션 ────────────────────────────────────────────────────────── */
+.lift-card {
+  transition:
+    transform 0.45s var(--ease-smooth),
+    box-shadow 0.45s var(--ease-smooth);
+}
+.lift-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* 퀴즈 정답 4색 타일 */
+.tile-a {
+  @apply bg-tile-red text-white;
+}
+.tile-b {
+  @apply bg-tile-blue text-white;
+}
+.tile-c {
+  @apply bg-tile-gold text-white;
+}
+.tile-d {
+  @apply bg-tile-green text-white;
+}
+
+/* 릴레이: 블록이 아래에서 하나씩 쌓이는 연출 */
+@keyframes block-stack {
+  0% {
+    transform: translateY(14px) scaleY(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(-2px) scaleY(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scaleY(1);
+    opacity: 1;
+  }
+}
+.block-stack {
+  animation: block-stack 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: bottom;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
