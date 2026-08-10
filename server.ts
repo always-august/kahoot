@@ -2,7 +2,6 @@ import { createServer } from "http";
 import next from "next";
 import { Server as IOServer } from "socket.io";
 import { registerSocketHandlers } from "./src/lib/socket/server";
-import { registerRelayHandlers } from "./src/lib/socket/relay";
 import { getLanIp, getPublicBase } from "./src/lib/net";
 import type {
   ClientToServerEvents,
@@ -22,7 +21,6 @@ app.prepare().then(() => {
   });
 
   registerSocketHandlers(io, port);
-  registerRelayHandlers(io, port);
 
   server.listen(port, () => {
     const lan = getLanIp();

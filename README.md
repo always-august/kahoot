@@ -4,7 +4,6 @@
 
 - **실시간 퀴즈** — 카훗 스타일. 방장이 퀴즈를 만들고 QR로 참가자를 모아 실시간 대결.
 - **럭키드로우** — CSV 명단 업로드 / 직접 편집 후 무작위 추첨(복권 긁기 연출).
-- **키워드 릴레이** — 키워드에 맞는 단어를 팀원들이 릴레이로 이어 채우는 순발력 게임. 먼저 목표 개수를 채운 팀 승리.
 
 ## 기술 스택
 
@@ -13,8 +12,8 @@
 | Framework | Next.js 14 (App Router) |
 | 실시간 | **Socket.io** (커스텀 Node 서버, `server.ts`) |
 | 언어 | TypeScript + React 18 |
-| 스타일 | Tailwind CSS — **아임웹 기술블로그 디자인 가이드** 준수 (Toss 블루 `#3182F6`, Pretendard, `ink/surface/line/base/card` 토큰, card·chip) |
-| 테마 | **라이트/다크 모드** (기본 라이트, 우상단 토글 + localStorage, FOUC 방지 인라인 스크립트) |
+| 스타일 | Tailwind CSS — 아임웹 기술블로그 디자인 가이드 기반 (브랜드 액센트는 매트릭스 그린 `#2bff66`, Pretendard, `ink/surface/line/base/card` 토큰, card·chip) |
+| 테마 | **다크 전용** (검정 배경 + 매트릭스 배경 연출, 모바일에서는 배경 애니메이션 비활성) |
 | QR | `qrcode.react` |
 | CSV | `papaparse` |
 | 방 상태 | 인메모리 (`RoomManager`) — 서버 재시작 시 초기화 |
@@ -37,9 +36,20 @@ PUBLIC_URL="https://내도메인.com" npm run start
 ```
 
 - `PORT` — 포트 (기본 3000)
-- `PUBLIC_URL` — **배포 시 필수**. QR·참여 링크가 이 주소를 사용합니다.
-  (미설정 시 LAN IP:포트 로 폴백 → 로컬/사내망 전용)
-- WebSocket 연결이 필요하므로 **정적 호스팅(GitHub Pages 등) 불가**. Node 프로세스가 상주하는 곳(Railway·Render·Fly·자체 서버 등)에 배포하세요.
+- `PUBLIC_URL` — QR·참여 링크에 쓸 공개 주소. **커스텀 도메인일 때만 지정**하면 됩니다.
+  (우선순위: `PUBLIC_URL` → `RENDER_EXTERNAL_URL`(Render 자동 주입) → LAN IP:포트)
+- WebSocket 연결이 필요하므로 **정적 호스팅(GitHub Pages)·서버리스(Vercel) 불가**. Node 프로세스가 상주하는 곳에 배포하세요.
+
+#### Render 배포
+
+레포에 [`render.yaml`](./render.yaml) 블루프린트가 있습니다. Render 대시보드에서 **New + → Blueprint** 로 이 레포를 선택하면 빌드·시작 명령이 자동 설정됩니다.
+
+- 빌드: `npm ci --include=dev && npm run build`
+  (`next build` 에 typescript/tailwind/postcss 가 필요해 devDependencies 를 반드시 포함해야 합니다)
+- `PUBLIC_URL` 설정 불필요 — Render 가 주입하는 `RENDER_EXTERNAL_URL` 을 자동으로 사용합니다.
+- ⚠️ **인스턴스는 1개 고정** — 방·점수가 인메모리라 2개 이상이면 참가자가 다른 서버에 붙어 깨집니다.
+- ⚠️ **이벤트 진행 중 재배포·재시작 금지** — 진행 중인 방과 점수가 모두 사라집니다.
+- free 플랜은 15분 유휴 시 슬립 + 콜드스타트(30~60초). 당일에는 `starter` 권장.
 
 ## 게임 흐름
 
@@ -59,31 +69,34 @@ PUBLIC_URL="https://내도메인.com" npm run start
 - 당첨 확정은 **긁어서 공개한 뒤** 기록/명단에 반영(미리 노출 방지), `당첨자 제외` 토글
 - 명단은 브라우저 `localStorage`에 저장
 
-### 키워드 릴레이
-1. 어드민이 라운드(키워드 + 목표 N + 제한시간 + 정답셋/별칭)와 팀 수를 설정, 방 개설(QR)
-2. 참가자가 입장 후 **팀 선택**(팀별 인원 실시간, 어드민 자동 밸런스 버튼)
-3. 라운드 시작 → 팀원 누구나 각자 기기에서 단어 제출 → **하이브리드 검증**
-   - 정답셋/별칭 매칭 → 자동 인정, 팀 **공용 목록 실시간 공유**(중복 방지)
-   - 중복 자동 거절, 미매칭은 어드민 **판정 대기열**(인정/거절, 승인 시 학습)
-   - **연속 금지**: 같은 사람이 연속으로 득점 불가(팀 2명 이상일 때) — 릴레이 강제
-4. **먼저 목표 N개를 채운 팀 승리**(백업: 제한시간 종료 시 최다), 라운드 점수 누적 → 최종 순위
+## 데이터 보관
+
+구성원 정보가 서버에 남지 않도록 설계돼 있습니다.
+
+- **프리셋(퀴즈·명단)** — 운영자 **브라우저 `localStorage`에만** 저장. 서버로 전송하지 않습니다.
+  → 당일 사용할 노트북·브라우저에서 미리 만들어 두세요(기기가 바뀌면 없습니다).
+- **방·점수·참가자** — 서버 메모리에만 존재하며 재시작 시 사라집니다.
+- **업로드 이미지** — `public/uploads` 에 저장되며 재배포 시 사라집니다(git 제외).
 
 ## 구조
 
 ```
 game_platform/
-├── server.ts                    커스텀 서버 (Next + Socket.io, 퀴즈+릴레이 핸들러 등록)
+├── render.yaml                  Render 배포 블루프린트
+├── server.ts                    커스텀 서버 (Next + Socket.io 핸들러 등록)
 ├── src/
 │   ├── app/
 │   │   ├── page.tsx             메인 (게임 선택)
 │   │   ├── quiz/{page,host,play} 실시간 퀴즈
 │   │   ├── lucky-draw/page.tsx  럭키드로우 (ScratchCard 포함)
-│   │   └── relay/{page,host,play}       키워드 릴레이
-│   ├── components/quiz/         QuestionEditor · QRPanel · Leaderboard
+│   │   └── api/upload/          퀴즈 이미지 업로드 (래스터만, SVG 차단)
+│   ├── components/
+│   │   ├── common/PresetBar     저장/불러오기 (localStorage 기반)
+│   │   ├── quiz/                QuestionEditor · QRPanel · Leaderboard
+│   │   └── ui/                  매트릭스 배경 · 스크램블 타이틀
 │   └── lib/
 │       ├── game/                퀴즈: types · scoring · rooms · factory
-│       ├── relay/               릴레이: types · rooms(팀·검증·연속금지)
-│       ├── socket/              events(타입) · server(퀴즈) · relay · client
-│       ├── net.ts               LAN IP / 참여 URL 결정
+│       ├── socket/              events(타입) · server · client
+│       ├── net.ts               공개 URL / LAN IP 결정
 │       └── useCountdown.ts      카운트다운 훅
 ```
