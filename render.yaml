@@ -5,14 +5,18 @@ services:
     name: play-imweb
     runtime: node
     plan: free # 이벤트 당일엔 starter($7/mo) 권장 — free 는 15분 유휴 시 슬립 + 콜드스타트(30~60초)
-    buildCommand: npm install && npm run build
+    # next build 에는 typescript/tailwind/postcss(=devDependencies) 가 필요하다.
+    # NODE_ENV=production 환경에서 npm 은 devDependencies 를 건너뛰므로 --include=dev 로 강제한다.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /
     # ⚠️ 인스턴스는 반드시 1개 — 방·점수가 메모리에 있어 2개 이상이면 참가자가 다른 서버에 붙어 깨짐.
     #    (free/starter 는 기본 1개. 유료에서 수동 스케일 금지)
     envVars:
-      - key: NODE_ENV
-        value: production
+      # 런타임 NODE_ENV=production 은 start 스크립트(cross-env)가 직접 설정하므로
+      # 여기에 두지 않는다 — 두면 빌드 단계 npm 이 devDependencies 를 빼서 빌드가 깨진다.
+      - key: NODE_VERSION
+        value: "20"
       # PUBLIC_URL 은 설정하지 않아도 됩니다 —
       # Render 가 RENDER_EXTERNAL_URL 을 자동 주입하고, 앱이 이를 참가 링크/QR 에 사용합니다(src/lib/net.ts).
       # 커스텀 도메인을 쓸 때만 PUBLIC_URL 을 그 주소로 지정하세요.
