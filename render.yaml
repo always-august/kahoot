@@ -10,6 +10,9 @@ services:
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /
+    # main 에 푸시하면 자동 배포. (이벤트 진행 중에는 절대 푸시하지 말 것 — 재시작되면 방·점수가 사라진다)
+    autoDeploy: true
+    branch: main
     # ⚠️ 인스턴스는 반드시 1개 — 방·점수가 메모리에 있어 2개 이상이면 참가자가 다른 서버에 붙어 깨짐.
     #    (free/starter 는 기본 1개. 유료에서 수동 스케일 금지)
     envVars:
