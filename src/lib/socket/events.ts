@@ -34,8 +34,19 @@ export interface ClientToServerEvents {
   "host:reveal": () => void; // 현재 문제 즉시 마감·집계 (이후 5초 뒤 자동 다음)
 
   "player:join": (
-    data: { code: string; nickname: string },
-    cb: (res: { ok: boolean; error?: string; quizTitle?: string }) => void,
+    /** token: 브라우저에 저장되는 안정적 식별자 — 소켓이 끊겨도 이걸로 본인을 되찾는다 */
+    data: { code: string; nickname: string; token?: string },
+    cb: (res: {
+      ok: boolean;
+      error?: string;
+      quizTitle?: string;
+      /** 기존 참가자로 복귀한 경우 */
+      reconnected?: boolean;
+      /** 복귀 시점에 이미 이번 문제 답을 낸 상태인지 */
+      alreadyAnswered?: boolean;
+      /** 서버가 기억하고 있던 닉네임(복귀 시) */
+      nickname?: string;
+    }) => void,
   ) => void;
   "player:answer": (
     data: { answer: Answer },

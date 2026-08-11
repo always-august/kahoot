@@ -20,6 +20,27 @@ type Phase =
 const TILE = ["tile-a", "tile-b", "tile-c", "tile-d"];
 const SHAPE = ["▲", "◆", "●", "■"];
 
+/**
+ * 방별 재접속 토큰. 소켓 id 는 끊길 때마다 바뀌므로,
+ * 브라우저에 남는 이 값으로 서버가 "돌아온 사람"을 알아본다.
+ * (http LAN 접속은 보안 컨텍스트가 아니라 randomUUID 가 없을 수 있어 폴백을 둔다)
+ */
+function tokenFor(code: string): string {
+  const key = `quiz:token:${code}`;
+  try {
+    let t = localStorage.getItem(key);
+    if (!t) {
+      t =
+        globalThis.crypto?.randomUUID?.() ??
+        `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem(key, t);
+    }
+    return t;
+  } catch {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
 function PlayInner() {
   const params = useSearchParams();
   const code = (params.get("room") ?? "").toUpperCase();
@@ -30,6 +51,10 @@ function PlayInner() {
   const [joinError, setJoinError] = useState("");
   const [joining, setJoining] = useState(false);
   const [quizTitle, setQuizTitle] = useState("");
+  const [waitingMsg, setWaitingMsg] = useState("");
+  // 재접속 시 그대로 다시 보내야 하므로 최신 값을 ref 로 들고 있는다
+  const joinedRef = useRef(false);
+  const nicknameRef = useRef("");
 
   const [question, setQuestion] = useState<PublicQuestion | null>(null);
   const [result, setResult] = useState<PersonalResult | null>(null);
@@ -45,6 +70,7 @@ function PlayInner() {
     socket.on("player:question", (q) => {
       setQuestion(q);
       setResult(null);
+      setWaitingMsg("");
       setPhase("question");
     });
     socket.on("player:result", (r) => {
@@ -55,14 +81,44 @@ function PlayInner() {
       setFinalRank(o);
       setPhase("over");
     });
+    // 재접속 복귀 시 서버가 알려주는 대기 상태(이미 답함 / 정답 공개 중)
+    socket.on("player:waiting", (d) => {
+      setWaitingMsg(d.message);
+      setPhase("answered");
+    });
     socket.on("room:closed", () => setPhase("closed"));
+
+    // ── 자동 재접속 ──
+    // 폰 잠금·앱 전환·네트워크 끊김으로 소켓이 죽어도 socket.io 가 다시 붙는다.
+    // 이때 소켓 id 가 바뀌므로 토큰으로 본인을 되찾아 게임에 복귀한다.
+    socket.on("connect", () => {
+      if (!joinedRef.current || !code) return;
+      socket.emit(
+        "player:join",
+        { code, nickname: nicknameRef.current, token: tokenFor(code) },
+        (res) => {
+          if (res.ok) {
+            if (res.nickname) {
+              setNickname(res.nickname);
+              nicknameRef.current = res.nickname;
+            }
+          } else {
+            // 방이 사라졌거나 복귀할 수 없는 상태
+            setPhase("closed");
+          }
+        },
+      );
+    });
+
     return () => {
       socket.off("player:question");
       socket.off("player:result");
       socket.off("player:over");
+      socket.off("player:waiting");
       socket.off("room:closed");
+      socket.off("connect");
     };
-  }, []);
+  }, [code]);
 
   const join = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,10 +126,13 @@ function PlayInner() {
     if (!name) return;
     setJoining(true);
     setJoinError("");
-    getSocket().emit("player:join", { code, nickname: name }, (res) => {
+    getSocket().emit("player:join", { code, nickname: name, token: tokenFor(code) }, (res) => {
       setJoining(false);
       if (res.ok) {
         setQuizTitle(res.quizTitle ?? "");
+        joinedRef.current = true;
+        nicknameRef.current = res.nickname ?? name;
+        if (res.nickname) setNickname(res.nickname);
         setPhase("lobby");
       } else {
         setJoinError(res.error ?? "입장에 실패했어요.");
@@ -130,9 +189,10 @@ function PlayInner() {
           {phase === "answered" ? "답변 완료" : "입장 완료"}
         </h1>
         <p className="mt-2 text-ink-500">
-          {phase === "answered"
-            ? "다른 참가자를 기다리는 중…"
-            : "방장이 시작하기를 기다리는 중…"}
+          {waitingMsg ||
+            (phase === "answered"
+              ? "다른 참가자를 기다리는 중…"
+              : "방장이 시작하기를 기다리는 중…")}
         </p>
         {quizTitle && <p className="mt-4 chip">{quizTitle}</p>}
         <p className="mt-6 text-sm text-ink-500">닉네임: {nickname}</p>
@@ -388,6 +448,41 @@ function Centered({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * 연결이 끊긴 동안만 뜨는 상단 배너.
+ * 화면 단계와 무관하게 필요하므로 소켓을 직접 구독한다(고정 위치라 어디에 있어도 됨).
+ * 한 번이라도 붙은 적이 있을 때만 표시해, 최초 로딩 중 깜빡임을 막는다.
+ */
+function ConnectionBanner() {
+  const [down, setDown] = useState(false);
+  const everConnected = useRef(false);
+
+  useEffect(() => {
+    const socket = getSocket();
+    const onConnect = () => {
+      everConnected.current = true;
+      setDown(false);
+    };
+    const onDisconnect = () => {
+      if (everConnected.current) setDown(true);
+    };
+    if (socket.connected) everConnected.current = true;
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+    };
+  }, []);
+
+  if (!down) return null;
+  return (
+    <div className="fixed inset-x-0 top-0 z-50 bg-tile-gold px-4 py-2 text-center text-sm font-bold text-black">
+      연결이 끊겼어요 — 다시 연결하는 중…
+    </div>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="text-center">
@@ -406,6 +501,7 @@ export default function PlayPage() {
         </Centered>
       }
     >
+      <ConnectionBanner />
       <PlayInner />
     </Suspense>
   );

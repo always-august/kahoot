@@ -1,8 +1,13 @@
 import type { Answer, Quiz } from "./types";
 
 export interface RoomPlayer {
-  /** = socket.id */
+  /** = socket.id — 재접속하면 새 소켓 id 로 갱신된다 */
   id: string;
+  /**
+   * 브라우저에 저장되는 안정적 식별자.
+   * 소켓 id 는 재접속마다 바뀌므로, 끊긴 참가자를 되찾는 기준은 이 토큰이다.
+   */
+  token: string;
   nickname: string;
   score: number;
   /** 직전 문제 획득 점수 */
@@ -86,14 +91,57 @@ export class RoomManager {
     return undefined;
   }
 
-  /** 닉네임 중복 검증 후 참가자 추가 */
+  /**
+   * 끊겼던 참가자를 새 소켓으로 되살린다.
+   * players/answers 는 소켓 id 로 키를 잡으므로 둘 다 새 id 로 옮겨야 한다.
+   */
+  private rekeyPlayer(room: Room, player: RoomPlayer, newSocketId: string) {
+    const oldId = player.id;
+    if (oldId === newSocketId) {
+      player.connected = true;
+      return;
+    }
+    room.players.delete(oldId);
+    // 끊기기 전에 제출해 둔 답안도 함께 이관 (중복 제출·점수 누락 방지)
+    const answer = room.answers.get(oldId);
+    if (answer) {
+      room.answers.delete(oldId);
+      room.answers.set(newSocketId, answer);
+    }
+    player.id = newSocketId;
+    player.connected = true;
+    room.players.set(newSocketId, player);
+  }
+
+  /**
+   * 참가자 추가. 토큰이 기존 참가자와 일치하면 **게임 진행 중이어도 복귀**시킨다.
+   * (폰 잠금·앱 전환·네트워크 끊김으로 이탈한 사람이 점수를 유지한 채 돌아올 수 있게)
+   */
   addPlayer(
     code: string,
     nickname: string,
     socketId: string,
-  ): { ok: boolean; error?: string; room?: Room } {
+    token?: string,
+  ): {
+    ok: boolean;
+    error?: string;
+    room?: Room;
+    reconnected?: boolean;
+    player?: RoomPlayer;
+  } {
     const room = this.getByCode(code);
     if (!room) return { ok: false, error: "존재하지 않는 방 코드예요." };
+
+    // 1) 재접속 — 토큰이 맞으면 phase 와 무관하게 복귀
+    if (token) {
+      const existing = [...room.players.values()].find((p) => p.token === token);
+      if (existing) {
+        this.rekeyPlayer(room, existing, socketId);
+        return { ok: true, room, reconnected: true, player: existing };
+      }
+    }
+
+    // 2) 신규 입장은 로비에서만
     if (room.phase !== "lobby") {
       return { ok: false, error: "이미 시작된 게임이에요." };
     }
@@ -106,14 +154,16 @@ export class RoomManager {
     );
     if (taken) return { ok: false, error: "이미 사용 중인 닉네임이에요." };
 
-    room.players.set(socketId, {
+    const player: RoomPlayer = {
       id: socketId,
+      token: token || socketId, // 토큰을 안 보낸 구버전 클라이언트도 동작하게
       nickname: name,
       score: 0,
       gained: 0,
       connected: true,
-    });
-    return { ok: true, room };
+    };
+    room.players.set(socketId, player);
+    return { ok: true, room, player };
   }
 
   removeRoom(code: string) {

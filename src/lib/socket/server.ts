@@ -138,6 +138,41 @@ function revealQuestion(io: IO, room: Room) {
   }, REVEAL_HOLD_MS);
 }
 
+/**
+ * 재접속한 참가자에게 현재 진행 상태를 되돌려준다.
+ * 이게 없으면 복귀해도 빈 대기 화면에 머물러 다음 문제까지 아무것도 못 한다.
+ */
+function restoreState(io: IO, room: Room, socket: IOSocket, alreadyAnswered: boolean) {
+  if (room.phase === "question") {
+    const q = room.quiz.questions[room.currentIndex];
+    if (!q) return;
+    // 이미 답을 낸 상태면 문제를 다시 띄우지 않고 대기 화면으로 (중복 제출 시도 방지)
+    if (alreadyAnswered) {
+      socket.emit("player:waiting", { message: "답변 완료 — 다음 문제를 기다리는 중" });
+      return;
+    }
+    socket.emit(
+      "player:question",
+      toPublicQuestion(q, room.currentIndex, room.quiz.questions.length, room.questionDeadline),
+    );
+    return;
+  }
+  if (room.phase === "reveal") {
+    // 공개 화면은 곧 다음 문제로 넘어가므로 대기만 시킨다
+    socket.emit("player:waiting", { message: "정답 공개 중 — 다음 문제를 기다리는 중" });
+    return;
+  }
+  if (room.phase === "over") {
+    const leaderboard = manager.leaderboard(room);
+    const rank = leaderboard.findIndex((e) => e.playerId === socket.id) + 1;
+    socket.emit("player:over", {
+      rank: rank || leaderboard.length,
+      totalPlayers: room.players.size,
+      score: room.players.get(socket.id)?.score ?? 0,
+    });
+  }
+}
+
 function finishGame(io: IO, room: Room) {
   if (room.revealTimer) clearTimeout(room.revealTimer);
   room.revealTimer = null;
@@ -180,13 +215,25 @@ export function registerSocketHandlers(io: IO, port: number) {
 
     // ── 참가자 ──
     socket.on("player:join", (data, cb) => {
-      const res = manager.addPlayer(data.code, data.nickname, socket.id);
+      const res = manager.addPlayer(data.code, data.nickname, socket.id, data.token);
       if (!res.ok || !res.room) return cb({ ok: false, error: res.error });
-      socket.join(res.room.code);
-      io.to(res.room.hostSocketId).emit("host:lobby", {
-        players: manager.lobbyList(res.room),
+      const room = res.room;
+      socket.join(room.code);
+      io.to(room.hostSocketId).emit("host:lobby", {
+        players: manager.lobbyList(room),
       });
-      cb({ ok: true, quizTitle: res.room.quiz.title });
+
+      const alreadyAnswered = room.answers.has(socket.id);
+      cb({
+        ok: true,
+        quizTitle: room.quiz.title,
+        reconnected: res.reconnected,
+        alreadyAnswered,
+        nickname: res.player?.nickname,
+      });
+
+      // 진행 중에 복귀한 사람은 지금 화면 상태를 그대로 받아야 이어서 참여할 수 있다
+      if (res.reconnected) restoreState(io, room, socket, alreadyAnswered);
     });
 
     socket.on("player:answer", (data, cb) => {
