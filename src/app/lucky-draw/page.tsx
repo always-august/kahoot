@@ -15,6 +15,23 @@ interface Participant {
 const HEADER_RE = /^(이름|name|성명|참가자|nickname)$/i;
 
 /**
+ * 공정한 무작위 추첨 — Fisher–Yates 부분 셔플.
+ * `sort(() => Math.random() - 0.5)` 는 비교 함수가 일관되지 않아 결과가 균등하지 않다
+ * (등록 순서에 따라 당첨 확률이 최대 3배 이상 벌어진다). 추첨기에서는 치명적이므로 쓰지 않는다.
+ * 앞의 count 개만 필요하므로 전체를 섞지 않고 그만큼만 교환한다.
+ */
+function pickRandom<T>(pool: T[], count: number): T[] {
+  const a = [...pool];
+  const n = Math.min(count, a.length);
+  for (let i = 0; i < n; i++) {
+    // i 이상 구간에서 균등하게 하나를 골라 앞으로 보낸다
+    const j = i + Math.floor(Math.random() * (a.length - i));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a.slice(0, n);
+}
+
+/**
  * 복권 긁기(스크래치) 카드 — 코팅을 긁으면 아래 children(당첨자)이 드러난다.
  * 일정 비율 이상 긁으면 나머지 코팅이 자동으로 사라진다.
  */
@@ -276,8 +293,7 @@ export default function LuckyDrawPage() {
 
     // 당첨자만 몰래 선정해 스크래치 카드로 덮어 둔다.
     // 당첨 확정(기록·명단 반영)은 카드를 긁어 공개한 뒤 commitWinner 에서.
-    const shuffled = [...pool].sort(() => Math.random() - 0.5);
-    const picked = shuffled.slice(0, count);
+    const picked = pickRandom(pool, count);
     setDrawId((d) => d + 1);
     setSlots(picked);
   };
