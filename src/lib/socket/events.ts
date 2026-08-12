@@ -13,6 +13,13 @@ export interface ServerToClientEvents {
   "host:answered": (data: { answeredCount: number; totalPlayers: number }) => void;
   "host:reveal": (data: HostReveal) => void;
   "host:over": (data: { leaderboard: LeaderboardEntry[] }) => void;
+  /** 정답 공개 화면의 진행 제어 상태 */
+  "host:revealControl": (data: {
+    paused: boolean;
+    autoAdvance: boolean;
+    /** 자동 진행 예정 시각(epoch ms). 정지 중이면 null */
+    resumeAt: number | null;
+  }) => void;
 
   // 참가자 대상
   "player:question": (data: PublicQuestion) => void;
@@ -32,6 +39,10 @@ export interface ClientToServerEvents {
   ) => void;
   "host:start": () => void;
   "host:reveal": () => void; // 현재 문제 즉시 마감·집계 (이후 5초 뒤 자동 다음)
+  "host:pause": () => void; // 정답 공개 화면에서 자동 진행 멈춤 (해설 시간)
+  "host:resume": () => void; // 다시 자동 진행 카운트다운 시작
+  "host:next": () => void; // 지금 바로 다음 문제로
+  "host:autoAdvance": (data: { enabled: boolean }) => void;
 
   "player:join": (
     /** token: 브라우저에 저장되는 안정적 식별자 — 소켓이 끊겨도 이걸로 본인을 되찾는다 */

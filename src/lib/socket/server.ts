@@ -128,14 +128,45 @@ function revealQuestion(io: IO, room: Room) {
     leaderboard,
   });
 
-  // 5초 뒤 자동으로 다음 문제 (마지막이면 종료)
-  room.revealTimer = setTimeout(() => {
-    if (room.currentIndex + 1 >= room.quiz.questions.length) {
-      finishGame(io, room);
-    } else {
-      sendQuestion(io, room, room.currentIndex + 1);
-    }
-  }, REVEAL_HOLD_MS);
+  scheduleAdvance(io, room);
+}
+
+/** 정답 공개 다음 단계로. 마지막 문제면 종료. */
+function advance(io: IO, room: Room) {
+  if (room.revealTimer) {
+    clearTimeout(room.revealTimer);
+    room.revealTimer = null;
+  }
+  room.paused = false;
+  if (room.currentIndex + 1 >= room.quiz.questions.length) finishGame(io, room);
+  else sendQuestion(io, room, room.currentIndex + 1);
+}
+
+/**
+ * 정답 공개 후 자동 진행 예약.
+ * 자동 진행이 꺼져 있으면 예약하지 않고 진행자가 직접 넘길 때까지 멈춰 있는다
+ * (해설할 시간을 확보하기 위한 장치).
+ */
+function scheduleAdvance(io: IO, room: Room) {
+  if (room.revealTimer) clearTimeout(room.revealTimer);
+  if (!room.autoAdvance) {
+    room.revealTimer = null;
+    room.paused = true;
+    notifyRevealControl(io, room);
+    return;
+  }
+  room.paused = false;
+  room.revealTimer = setTimeout(() => advance(io, room), REVEAL_HOLD_MS);
+  notifyRevealControl(io, room, Date.now() + REVEAL_HOLD_MS);
+}
+
+/** 진행자 화면에 현재 정지/자동진행 상태를 알린다 */
+function notifyRevealControl(io: IO, room: Room, resumeAt?: number) {
+  io.to(room.hostSocketId).emit("host:revealControl", {
+    paused: room.paused,
+    autoAdvance: room.autoAdvance,
+    resumeAt: resumeAt ?? null,
+  });
 }
 
 /**
@@ -211,6 +242,43 @@ export function registerSocketHandlers(io: IO, port: number) {
     socket.on("host:reveal", () => {
       const room = manager.getByHost(socket.id);
       if (room) revealQuestion(io, room);
+    });
+
+    // ── 정답 공개 화면 진행 제어 (해설 시간 확보) ──
+    socket.on("host:pause", () => {
+      const room = manager.getByHost(socket.id);
+      if (!room || room.phase !== "reveal") return;
+      if (room.revealTimer) {
+        clearTimeout(room.revealTimer);
+        room.revealTimer = null;
+      }
+      room.paused = true;
+      notifyRevealControl(io, room);
+    });
+
+    socket.on("host:resume", () => {
+      const room = manager.getByHost(socket.id);
+      if (!room || room.phase !== "reveal" || !room.paused) return;
+      room.paused = false;
+      room.revealTimer = setTimeout(() => advance(io, room), REVEAL_HOLD_MS);
+      notifyRevealControl(io, room, Date.now() + REVEAL_HOLD_MS);
+    });
+
+    /** 지금 바로 다음 문제로 */
+    socket.on("host:next", () => {
+      const room = manager.getByHost(socket.id);
+      if (!room || room.phase !== "reveal") return;
+      advance(io, room);
+    });
+
+    /** 자동 진행 on/off — 끄면 매 문제 공개 후 진행자가 넘길 때까지 대기 */
+    socket.on("host:autoAdvance", ({ enabled }) => {
+      const room = manager.getByHost(socket.id);
+      if (!room) return;
+      room.autoAdvance = enabled;
+      // 이미 공개 화면이라면 즉시 반영
+      if (room.phase === "reveal") scheduleAdvance(io, room);
+      else notifyRevealControl(io, room);
     });
 
     // ── 참가자 ──

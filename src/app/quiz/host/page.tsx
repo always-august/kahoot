@@ -37,6 +37,12 @@ export default function HostPage() {
   const [answered, setAnswered] = useState({ answeredCount: 0, totalPlayers: 0 });
   const [reveal, setReveal] = useState<HostReveal | null>(null);
   const [finalBoard, setFinalBoard] = useState<LeaderboardEntry[]>([]);
+  /** 정답 공개 화면 진행 제어 (해설 시간 확보용) */
+  const [control, setControl] = useState<{
+    paused: boolean;
+    autoAdvance: boolean;
+    resumeAt: number | null;
+  }>({ paused: false, autoAdvance: true, resumeAt: null });
 
   useEffect(() => {
     const socket = getSocket();
@@ -54,6 +60,7 @@ export default function HostPage() {
       setReveal(d);
       setPhase("reveal");
     });
+    socket.on("host:revealControl", (d) => setControl(d));
     socket.on("host:over", (d) => {
       setFinalBoard(d.leaderboard);
       setPhase("over");
@@ -63,6 +70,7 @@ export default function HostPage() {
       socket.off("player:question");
       socket.off("host:answered");
       socket.off("host:reveal");
+      socket.off("host:revealControl");
       socket.off("host:over");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -211,6 +219,22 @@ export default function HostPage() {
         </div>
       )}
 
+      {/* 진행 옵션 — 끄면 정답 공개 후 자동으로 넘어가지 않아 해설 시간을 충분히 쓸 수 있다 */}
+      {(phase === "question" || phase === "reveal") && (
+        <label className="mb-4 flex cursor-pointer items-center justify-end gap-2 text-sm text-ink-700">
+          <input
+            type="checkbox"
+            checked={control.autoAdvance}
+            onChange={(e) => {
+              setControl((c) => ({ ...c, autoAdvance: e.target.checked }));
+              socketRef.current?.emit("host:autoAdvance", { enabled: e.target.checked });
+            }}
+            className="h-4 w-4 accent-brand"
+          />
+          정답 공개 후 자동 진행
+        </label>
+      )}
+
       {/* 문제 진행 */}
       {phase === "question" && currentQ && (
         <QuestionLive
@@ -225,7 +249,14 @@ export default function HostPage() {
 
       {/* 정답 공개 */}
       {phase === "reveal" && reveal && currentQ && (
-        <RevealLive question={currentQ} reveal={reveal} />
+        <RevealLive
+          question={currentQ}
+          reveal={reveal}
+          control={control}
+          onPause={() => socketRef.current?.emit("host:pause")}
+          onResume={() => socketRef.current?.emit("host:resume")}
+          onNext={() => socketRef.current?.emit("host:next")}
+        />
       )}
 
       {/* 최종 결과 */}
@@ -389,10 +420,20 @@ function QuestionPreview({ question }: { question: Question }) {
 function RevealLive({
   question,
   reveal,
+  control,
+  onPause,
+  onResume,
+  onNext,
 }: {
   question: Question;
   reveal: HostReveal;
+  control: { paused: boolean; autoAdvance: boolean; resumeAt: number | null };
+  onPause: () => void;
+  onResume: () => void;
+  onNext: () => void;
 }) {
+  const remaining = useCountdown(control.resumeAt);
+  const seconds = Math.ceil(remaining / 1000);
   return (
     <div>
       <h2 className="mb-4 text-center text-xl font-bold text-ink-700">{question.text}</h2>
@@ -407,8 +448,29 @@ function RevealLive({
         </p>
       )}
       <p className="mt-4 text-center text-sm text-ink-500">
-        응답 {reveal.answeredCount} / {reveal.totalPlayers} · 잠시 후 다음 문제로 넘어갑니다…
+        응답 {reveal.answeredCount} / {reveal.totalPlayers}
+        {control.paused
+          ? " · 진행 멈춤 — 해설하세요"
+          : control.resumeAt
+            ? ` · ${seconds}초 후 다음 문제`
+            : ""}
       </p>
+
+      {/* 진행 제어 — 해설할 시간을 벌기 위한 정지/수동 진행 */}
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        {control.paused ? (
+          <button onClick={onResume} className="btn-ghost px-5 py-2 text-sm">
+            ▶ 자동 진행 재개
+          </button>
+        ) : (
+          <button onClick={onPause} className="btn-ghost px-5 py-2 text-sm">
+            ⏸ 잠시 멈춤
+          </button>
+        )}
+        <button onClick={onNext} className="btn-primary px-5 py-2 text-sm">
+          다음 문제 →
+        </button>
+      </div>
 
       <h3 className="mb-3 mt-8 text-lg font-bold">
         순위 <span className="text-sm font-normal text-ink-500">TOP 5</span>
@@ -420,8 +482,9 @@ function RevealLive({
 
 function Podium({ entries }: { entries: LeaderboardEntry[] }) {
   const top = entries.slice(0, 3);
-  const order = [1, 0, 2]; // 2등, 1등, 3등 배치
-  const heights = ["h-24", "h-36", "h-16"];
+  const order = [1, 0, 2]; // 화면 배치: 왼쪽부터 2등·1등·3등
+  // 순위(0=1등)로 인덱싱한다 — 배치 순서와 헷갈리면 2등 단상이 제일 높아진다
+  const heights = ["h-36", "h-24", "h-16"];
   return (
     <div className="flex items-end justify-center gap-3">
       {order.map((rank) => {

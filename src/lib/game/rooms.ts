@@ -30,6 +30,10 @@ export interface Room {
   /** 현재 문제 응답: playerId → { answer, at } */
   answers: Map<string, { answer: Answer; at: number }>;
   revealTimer: NodeJS.Timeout | null;
+  /** 정답 공개 후 자동으로 다음 문제로 넘어갈지 (진행자 해설 시간을 위해 끌 수 있음) */
+  autoAdvance: boolean;
+  /** 정답 공개 화면에서 진행이 멈춰 있는지 */
+  paused: boolean;
   joinUrl: string;
 }
 
@@ -67,6 +71,8 @@ export class RoomManager {
       questionDeadline: 0,
       answers: new Map(),
       revealTimer: null,
+      autoAdvance: true,
+      paused: false,
       joinUrl: `${joinBaseUrl}/quiz/play?room=${code}`,
     };
     this.rooms.set(code, room);
