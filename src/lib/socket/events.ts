@@ -6,6 +6,8 @@ import type {
   PublicQuestion,
   Quiz,
 } from "../game/types";
+import type { QaQuestion } from "../qa/types";
+
 /** 서버 → 클라이언트 이벤트 */
 export interface ServerToClientEvents {
   // 방장 대상
@@ -26,6 +28,12 @@ export interface ServerToClientEvents {
   "player:result": (data: PersonalResult) => void;
   "player:waiting": (data: { message: string }) => void;
   "player:over": (data: { rank: number; totalPlayers: number; score: number }) => void;
+
+  // ── 익명 Q&A ──
+  /** 질문 목록 전체 (방장·참가자 공통) */
+  "qa:list": (data: { questions: QaQuestion[] }) => void;
+  /** 이 소켓이 투표했거나 작성한 질문 — 본인에게만 내려간다 */
+  "qa:mine": (data: { voted: string[]; authored: string[] }) => void;
 
   // 공통
   "room:closed": () => void;
@@ -63,4 +71,29 @@ export interface ClientToServerEvents {
     data: { answer: Answer },
     cb: (res: { received: boolean; error?: string }) => void,
   ) => void;
+
+  // ── 익명 Q&A ──
+  "qa:create": (
+    data: { title: string },
+    cb: (res: { code: string; joinUrl: string }) => void,
+  ) => void;
+  /** 방장이 새로고침·재접속했을 때 기존 방을 이어받는다 */
+  "qa:resume": (
+    data: { code: string },
+    cb: (res: { ok: boolean; error?: string; title?: string }) => void,
+  ) => void;
+  /** 참가자 입장 — 익명이라 닉네임은 받지 않는다. token 은 중복투표·본인글 판별용 */
+  "qa:join": (
+    data: { code: string; token: string },
+    cb: (res: { ok: boolean; error?: string; title?: string }) => void,
+  ) => void;
+  "qa:ask": (
+    data: { text: string; token: string },
+    cb: (res: { ok: boolean; error?: string }) => void,
+  ) => void;
+  "qa:vote": (data: { id: string; token: string }) => void;
+  /** 방장 전용 — 해결 처리(토글) */
+  "qa:resolve": (data: { id: string; resolved: boolean }) => void;
+  /** 방장 전용 — 삭제(부적절한 질문 정리) */
+  "qa:delete": (data: { id: string }) => void;
 }

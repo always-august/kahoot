@@ -2,6 +2,7 @@ import { createServer } from "http";
 import next from "next";
 import { Server as IOServer } from "socket.io";
 import { registerSocketHandlers } from "./src/lib/socket/server";
+import { registerQaHandlers } from "./src/lib/socket/qa";
 import { getLanIp, getPublicBase } from "./src/lib/net";
 import type {
   ClientToServerEvents,
@@ -21,6 +22,7 @@ app.prepare().then(() => {
   });
 
   registerSocketHandlers(io, port);
+  registerQaHandlers(io, port);
 
   server.listen(port, () => {
     const lan = getLanIp();

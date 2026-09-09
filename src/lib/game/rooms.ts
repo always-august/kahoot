@@ -1,3 +1,4 @@
+import { generateRoomCode } from "../roomCode";
 import type { Answer, Quiz } from "./types";
 
 export interface RoomPlayer {
@@ -37,29 +38,14 @@ export interface Room {
   joinUrl: string;
 }
 
-const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 헷갈리는 0,O,1,I 제외
-const CODE_LEN = 6;
-
 /**
  * 방 목록을 관리하는 인메모리 저장소. (이벤트성 게임이라 DB 불필요 — 서버 재시작 시 초기화)
  */
 export class RoomManager {
   private rooms = new Map<string, Room>();
 
-  private genCode(): string {
-    let code = "";
-    do {
-      code = "";
-      for (let i = 0; i < CODE_LEN; i++) {
-        // Math.random 은 이벤트 코드 용도로 충분
-        code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
-      }
-    } while (this.rooms.has(code));
-    return code;
-  }
-
   createRoom(hostSocketId: string, quiz: Quiz, joinBaseUrl: string): Room {
-    const code = this.genCode();
+    const code = generateRoomCode((c) => this.rooms.has(c));
     const room: Room = {
       code,
       hostSocketId,

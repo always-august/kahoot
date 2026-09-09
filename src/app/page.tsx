@@ -17,8 +17,7 @@ export default function HomePage() {
 
         <div className="min-h-[clamp(0.75rem,2.5vh,1rem)] max-h-24 w-full flex-1" />
 
-        {/* 게임 2개 — 3열이면 오른쪽이 비므로 최대 2열, 폭도 함께 제한해 가운데 모이게 */}
-        <div className="mx-auto grid w-full max-w-3xl grid-cols-1 gap-[clamp(0.5rem,1.5vh,1.5rem)] [@media(max-height:700px)]:grid-cols-2 sm:grid-cols-2">
+        <div className="mx-auto grid w-full grid-cols-1 gap-[clamp(0.5rem,1.5vh,1.5rem)] [@media(max-height:700px)]:grid-cols-3 sm:grid-cols-2 lg:grid-cols-3">
           <GameCard
             href="/quiz"
             title="실시간 퀴즈"
@@ -30,6 +29,12 @@ export default function HomePage() {
             title="럭키드로우"
             desc="CSV로 명단을 올리거나 직접 추가해 당첨자를 무작위 추첨. 동시 슬롯 연출."
             cta="추첨 시작"
+          />
+          <GameCard
+            href="/qa"
+            title="익명 Q&A"
+            desc="발표 중 QR로 익명 질문을 받고 인기순으로 정렬. 발표자 보기로 크게 띄우고 해결 처리."
+            cta="Q&A 열기"
           />
         </div>
 
